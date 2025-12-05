@@ -1,22 +1,47 @@
+# app.py
+
 import streamlit as st
+import pandas as pd
 import numpy as np
-import joblib
+import pickle
+import requests
 
-model = joblib.load("hiv_model.pkl")
+# --- Load the trained model ---
+with open("model.pkl", "rb") as file:
+    model = pickle.load(file)
 
-st.title("HIV Risk Prediction App")
+# --- Streamlit App Interface ---
+st.title("HIV Prediction App")
+st.write("Enter the following details:")
 
-Num_Partners = st.number_input("Number of Sexual Partners", min_value=0)
-Condom_Use = st.selectbox("Condom Use (1 = Yes, 0 = No)", [1, 0])
-Drug_Use = st.selectbox("Drug Use (1 = Yes, 0 = No)", [1, 0])
-STI_History = st.selectbox("History of STIs (1 = Yes, 0 = No)", [1, 0])
-Sex_Work_Years = st.number_input("Years in Sex Work", min_value=0)
+# Input fields (based on your dataset)
+age = st.number_input("Age", min_value=0, max_value=120, value=25)
+bmi = st.number_input("BMI", min_value=0.0, max_value=50.0, value=22.5)
+risk_level = st.selectbox("Risk Level", ["Low", "Medium", "High"])
 
+# Collect input data into a DataFrame
+input_data = pd.DataFrame({
+    "Age": [age],
+    "BMI": [bmi],
+    "Risk_Level": [risk_level]
+})
+
+# --- Prediction ---
 if st.button("Predict"):
-    user_input = np.array([[Num_Partners, Condom_Use, Drug_Use, STI_History, Sex_Work_Years]])
-    prediction = model.predict(user_input)
+    prediction = model.predict(input_data)
+    st.success(f"The predicted result is: {prediction[0]}")
 
-    if prediction[0] == 1:
-        st.error("⚠️ High Risk of HIV")
+    # --- Send result to ThingSpeak ---
+    THINGSPEAK_API_KEY = "KGVZ4UJJZ9KZQ36G"
+    CHANNEL_FIELD = "field1"  # adjust field if needed
+
+    data = {CHANNEL_FIELD: prediction[0]}
+    response = requests.post(
+        f"https://api.thingspeak.com/update?api_key={THINGSPEAK_API_KEY}",
+        data=data
+    )
+
+    if response.status_code == 200:
+        st.info("Prediction successfully sent to ThingSpeak!")
     else:
-        st.success("✅ Low Risk of HIV")
+        st.error("Failed to send prediction to ThingSpeak.")
